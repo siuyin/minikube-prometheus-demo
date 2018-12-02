@@ -1,6 +1,29 @@
 apiVersion: v1
 data:
+  alert.rules.yml: |
+    groups:
+      - name: alert.rules
+        rules:
+          - alert: EndPointDown
+            expr: probe_success == 0
+            for: 2s
+            labels:
+              severity: critical
+            annotations:
+              summary: "Endpoint {{ $labels.instance }} down"
+
   prometheus.yml: |
+    # recording and alerting rules
+    rule_files:
+      - alert.rules.yml
+
+    # alerting
+    alerting:
+      alertmanagers:
+        - static_configs:
+          - targets:
+            - 192.168.99.1:9093
+
     # A scrape configuration for running Prometheus on a Kubernetes cluster.
     # This uses separate scrape configs for cluster components (i.e. API server, node)
     # and services to allow each to use different authentication configs.
@@ -274,6 +297,22 @@ data:
       - source_labels: [__meta_kubernetes_pod_name]
         action: replace
         target_label: kubernetes_pod_name
+    # scrape blackbox exporter
+    - job_name: 'blackbox'
+      metrics_path: /probe
+      params:
+        module: [http_2xx]
+      static_configs:
+        - targets:
+          - https://192.168.99.1:8080
+          - localhost:3999
+      relabel_configs:
+        - source_labels: [__address__]
+          target_label: __param_target
+        - source_labels: [__param_target]
+          target_label: instance
+        - target_label: __address__
+          replacement: '192.168.99.1:9115'
 kind: ConfigMap
 metadata:
   name: prometheus-config
